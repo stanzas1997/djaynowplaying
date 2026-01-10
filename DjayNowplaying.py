@@ -3,6 +3,7 @@
 # Added: 2025-12-31
 # copyright (c) 2025-2026 stanzas
 # License: MIT
+# version 1.1
 import sqlite3
 import time
 import os
@@ -18,6 +19,8 @@ import shutil
 import tkinter as tk
 from tkinter import scrolledtext, filedialog, messagebox
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import appdirs
+from pathlib import Path
 
 # Try to import mutagen for artwork extraction
 try:
@@ -27,7 +30,7 @@ except ImportError:
     HAS_MUTAGEN = False
 
 # ================= Configuration =================
-CONFIG_FILE = "DjayNowplaying_config.json"
+CONFIG_FILE = "config.json"
 DEFAULT_CONFIG = {
     "db_path": None,
     "poll_interval": 0.5,
@@ -58,16 +61,24 @@ current_config = DEFAULT_CONFIG.copy()
 
 def get_app_dir():
     """Get the directory where the application is running"""
-    if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    config_dir=appdirs.user_config_dir("DjayNowplaying")
+    Path(config_dir).mkdir(parents=True, exist_ok=True)
+    return config_dir
+    #if getattr(sys, 'frozen', False):
+    #    return os.path.dirname(sys.executable)
+    #return os.path.dirname(os.path.abspath(__file__))
+    
+    
 
 def get_template_content():
     """Read HTML template, use default if not found"""
     base_dir = get_app_dir()
     template_file = current_config.get("template_file", "template.html")
-    template_path = os.path.join(base_dir, template_file)
-    
+    #template_path = os.path.join(base_dir, template_file)
+    template_path = Path(base_dir,template_file)
+    if not template_path.exists():
+        default_file=Path(Path(__file__).resolve().parent,"template.html")
+        shutil.copy(default_file,base_dir)
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
             return f.read()
@@ -78,7 +89,7 @@ def load_config():
     """Load configuration from JSON file"""
     global current_config
     config_path = os.path.join(get_app_dir(), CONFIG_FILE)
-    
+
     loaded_config = DEFAULT_CONFIG.copy()
     
     if os.path.exists(config_path):
@@ -169,15 +180,18 @@ class ArtworkManager:
                     title = decoded[i-1]
                 elif s == 'artist' and i > 0:
                     artist = decoded[i-1]
-                elif s.startswith('file:///'):
+                elif s.startswith('file:///') and file_path == None:  #make sure that only one will be taken
                     file_path = s
             
             if title and artist and file_path:
                 # Decode URL
                 path = urllib.parse.unquote(file_path)
                 if path.startswith('file:///'):
-                    path = path[8:] # Remove file:///
-                path = path.replace('/', '\\')
+                    if sys.platform=="win32": #for windows users 
+                        path = path[8:] # Remove file:///
+                        path = path.replace('/', '\\')
+                    else:
+                        path = path[7:] # Remove file://
                 return (artist, title, path)
         except:
             pass
